@@ -1,0 +1,23 @@
+{
+        "files.exclude": {
+                "src/_ReSharper.**": true,
+                "node_modules": true,
+                "scripts": true,
+                "docs": true,
+                ".vs": true,
+                ".dist": true,
+                "**/.git": true,
+                "**/.DS_Store": true,
+                "**/*.js.map": true,
+                "**/*.js": {
+                        "when": "$(basename).ts"
+                },
+                "src/**/bin": true,
+                "src/**/Properties": true,
+                "src/**/obj": true,
+                "**/*.user": true,
+                "tools": true,
+                "build": true,
+                "src/.vs": true
+        }
+}
