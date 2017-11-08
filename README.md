@@ -1,16 +1,9 @@
-# SQL Stream Store
+# SQL Stream Store with Transaction Support
 
 A stream store library for .NET that specifically target SQL based implementations. Typically
 used in Event Sourced based applications.
 
-| Package | Install |
-| --- | --- |
-| SqlStreamStore (Memory) | [![NuGet](https://img.shields.io/nuget/v/SqlStreamStore.svg)](https://www.nuget.org/packages/SqlStreamStore) |
-| MSSql | [![NuGet](https://img.shields.io/nuget/v/SqlStreamStore.svg)](https://www.nuget.org/packages/SqlStreamStore.MsSql) |
-| Postgres | _under development_ |
-| MySql | [_up for grabs_](https://github.com/damianh/SqlStreamStore/issues/29) |
-| Sqlite | [_up for grabs_](https://github.com/damianh/SqlStreamStore/issues/28) |
-| HTTP Wrapper API | _under development_ |
+Forked from https://github.com/SQLStreamStore/SQLStreamStore to add transaction support.
 
 # Design considerations:
 
@@ -19,11 +12,10 @@ used in Event Sourced based applications.
  - API is influenced by (but not compatible with) [EventStore](https://geteventstore.com/)
  - Async only.
  - JSON only event and metadata payloads (usually just a `string` / `varchar` / etc).
- - No support for `System.Transaction` enforcing the concept of the stream as the consistency and transaction boundary.
+ - Transaction support 
+ 
+    *(if you want 'enforcing the concept of the stream as the consistency and transaction boundary' you should look at: https://github.com/SQLStreamStore/SQLStreamStore)*
 
-# Using
-
-See [Wiki](../../wiki) to get started.
 
 # Licences
 
