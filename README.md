@@ -16,7 +16,6 @@ Forked from https://github.com/SQLStreamStore/SQLStreamStore to add transaction 
  
     *(if you want 'enforcing the concept of the stream as the consistency and transaction boundary' you should look at: https://github.com/SQLStreamStore/SQLStreamStore)*
 
-See [Wiki](../../wiki) to get started.
 Coming soon.
 
 # Help & Support
