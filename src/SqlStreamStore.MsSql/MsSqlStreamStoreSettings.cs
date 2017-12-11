@@ -21,6 +21,7 @@ namespace SqlStreamStore
             Ensure.That(connectionString, nameof(connectionString)).IsNotNullOrWhiteSpace();
 
             ConnectionString = connectionString;
+            Factory = new TransactionalDatabaseSessionFactory(connectionString);
         }
 
         /// <summary>
@@ -34,6 +35,8 @@ namespace SqlStreamStore
         /// </summary>
         public CreateStreamStoreNotifier CreateStreamStoreNotifier { get; set; } =
             store => new PollingStreamStoreNotifier(store);
+
+        public IDatabaseSessionFactory Factory { get; set; }
 
         /// <summary>
         ///     MsSqlStream store supports stores in a single database through 

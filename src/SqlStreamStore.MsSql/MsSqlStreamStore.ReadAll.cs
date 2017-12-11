@@ -35,6 +35,7 @@
                     List<StreamMessage> messages = new List<StreamMessage>();
                     if (!reader.HasRows)
                     {
+                        reader.Dispose();
                         return new ReadAllPage(
                             fromPositionExlusive,
                             fromPositionExlusive,
@@ -94,7 +95,7 @@
                     }
 
                     var nextPosition = messages[messages.Count - 1].Position + 1;
-
+                    reader.Dispose();
                     return new ReadAllPage(
                         fromPositionExlusive,
                         nextPosition,
@@ -130,6 +131,7 @@
                     List<StreamMessage> messages = new List<StreamMessage>();
                     if (!reader.HasRows)
                     {
+                        reader.Dispose();
                         // When reading backwards and there are no more items, then next position is LongPosition.Start,
                         // regardles of what the fromPosition is.
                         return new ReadAllPage(
@@ -187,7 +189,7 @@
                     }
 
                     fromPositionExclusive = messages.Any() ? messages[0].Position : 0;
-
+                    reader.Dispose();
                     return new ReadAllPage(
                         fromPositionExclusive,
                         nextPosition,

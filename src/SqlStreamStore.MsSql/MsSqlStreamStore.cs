@@ -12,7 +12,7 @@
     using SqlStreamStore.MsSqlScripts;
     using SqlStreamStore.Subscriptions;
 
-    public class TransactionalDatabaseSessionWrapper
+    internal class TransactionalDatabaseSessionWrapper
         : IDatabaseSession
     {
         readonly SqlConnection _connection;
@@ -104,6 +104,24 @@
         }
     }
 
+    public class ExternalyManagedDatabaseSessionFactory
+        : IDatabaseSessionFactory
+    {
+        private readonly Func<Tuple<SqlConnection, SqlTransaction>> _connection;
+
+        public ExternalyManagedDatabaseSessionFactory(Func<Tuple<SqlConnection,SqlTransaction>> connection)
+        {
+            _connection = connection;
+        }
+
+        public async Task<IDatabaseSession> Create(CancellationToken cancellationToken)
+        {
+            var con = _connection();
+            return new TransactionalDatabaseSessionWrapper(con.Item1,con.Item2, true);
+        }
+    }
+
+
     public class TransactionalDatabaseSessionFactory
         : IDatabaseSessionFactory
     {
@@ -190,7 +208,7 @@
             _settings = settings;
             Ensure.That(settings, nameof(settings)).IsNotNull();
 
-            _sessionFactory = new TransactionalDatabaseSessionFactory(settings.ConnectionString);
+            _sessionFactory = settings.Factory;
 
 
             _streamStoreNotifier = new Lazy<IStreamStoreNotifier>(() =>
@@ -238,7 +256,7 @@
 
                 if (_scripts.Schema != "dbo")
                 {
-                    using (var command =new SqlCommand($@"
+                    using (var command = new SqlCommand($@"
                         IF NOT EXISTS (
                         SELECT  schema_name
                         FROM    information_schema.schemata
@@ -246,7 +264,7 @@
 
                         BEGIN
                         EXEC sp_executesql N'CREATE SCHEMA {_scripts.Schema}'
-                        END",conn))
+                        END", conn))
                     {
                         await command
                             .ExecuteNonQueryAsync(cancellationToken)
@@ -254,12 +272,12 @@
                     }
                 }
 
-                using (var command = new SqlCommand(_scripts.CreateSchema,conn))
+                using (var command = new SqlCommand(_scripts.CreateSchema, conn))
                 {
                     await command.ExecuteNonQueryAsync(cancellationToken)
                         .NotOnCapturedContext();
                 }
-               
+
             }
         }
 
@@ -281,7 +299,7 @@
 
                         BEGIN
                         EXEC sp_executesql N'CREATE SCHEMA {_scripts.Schema}'
-                        END",conn))
+                        END", conn))
                     {
                         await command
                             .ExecuteNonQueryAsync(cancellationToken)
@@ -289,7 +307,7 @@
                     }
                 }
 
-                using (var command = new SqlCommand(_scripts.CreateSchema_v1,conn))
+                using (var command = new SqlCommand(_scripts.CreateSchema_v1, conn))
                 {
                     await command.ExecuteNonQueryAsync(cancellationToken)
                         .NotOnCapturedContext();

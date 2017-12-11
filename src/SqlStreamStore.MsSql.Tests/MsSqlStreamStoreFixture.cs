@@ -32,12 +32,36 @@ namespace SqlStreamStore
             return await GetStreamStore(_schema);
         }
 
+        Tuple<SqlConnection, SqlTransaction> _connectionTuple = null;
+        private object _lock = new object();
+
         public async Task<IStreamStore> GetStreamStore(string schema)
         {
+            var factory = new ExternalyManagedDatabaseSessionFactory(() =>
+            {
+                if(_connectionTuple == null)
+                {
+                    lock(_lock)
+                    {
+                        if(_connectionTuple == null)
+                        {
+                            var sqlConnection = new SqlConnection(ConnectionString);
+                            sqlConnection.Open();
+                            var tx = sqlConnection.BeginTransaction();
+
+                            _connectionTuple = Tuple.Create(sqlConnection, tx);
+                        }
+                    }
+                }
+
+                return _connectionTuple;
+            });
+
             var settings = new MsSqlStreamStoreSettings(ConnectionString)
             {
                 Schema = schema,
-                GetUtcNow = () => GetUtcNow()
+                GetUtcNow = () => GetUtcNow(),
+              Factory = factory
             };
             var store = new MsSqlStreamStore(settings);
             await store.CreateSchema();
@@ -77,7 +101,8 @@ namespace SqlStreamStore
             var settings = new MsSqlStreamStoreSettings(ConnectionString)
             {
                 Schema = _schema,
-                GetUtcNow = () => GetUtcNow()
+                GetUtcNow = () => GetUtcNow(),
+                
             };
 
             var store = new MsSqlStreamStore(settings);
@@ -88,6 +113,10 @@ namespace SqlStreamStore
 
         public override void Dispose()
         {
+            _connectionTuple?.Item2.Commit();
+            _connectionTuple?.Item2.Dispose();
+            _connectionTuple?.Item1.Dispose();
+
             using(var sqlConnection = new SqlConnection(ConnectionString))
             {
                 // Fixes: "Cannot drop database because it is currently in use"
