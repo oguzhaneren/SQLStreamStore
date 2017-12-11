@@ -1,4 +1,4 @@
-BEGIN TRANSACTION AppendStream;
+
     DECLARE @streamIdInternal AS INT;
     DECLARE @latestStreamVersion AS INT;
 	DECLARE @latestStreamPosition AS BIGINT;
@@ -10,14 +10,14 @@ BEGIN TRANSACTION AppendStream;
 
          IF @streamIdInternal IS NULL
         BEGIN
-            ROLLBACK TRANSACTION AppendStream;
+            
             RAISERROR('WrongExpectedVersion', 16, 1);
             RETURN;
         END
 
         IF @latestStreamVersion != @expectedStreamVersion
         BEGIN
-            ROLLBACK TRANSACTION AppendStream;
+            
             RAISERROR('WrongExpectedVersion', 16, 2);
             RETURN;
         END
@@ -45,7 +45,7 @@ INSERT INTO dbo.Messages (StreamIdInternal, StreamVersion, Id, Created, [Type], 
             dbo.Streams.[Position] = @latestStreamPosition
       WHERE dbo.Streams.IdInternal = @streamIdInternal
 
-COMMIT TRANSACTION AppendStream;
+
 
 /* Select CurrentVersion, CurrentPosition */
 

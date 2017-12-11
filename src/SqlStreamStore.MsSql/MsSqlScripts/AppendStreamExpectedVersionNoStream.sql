@@ -1,4 +1,4 @@
-BEGIN TRANSACTION CreateStream;
+
     DECLARE @streamIdInternal AS INT;
     DECLARE @latestStreamVersion AS INT;
 	DECLARE @latestStreamPosition AS BIGINT;
@@ -36,7 +36,7 @@ BEGIN TRANSACTION CreateStream;
                    dbo.Streams.[Position] = @latestStreamPosition
              WHERE dbo.Streams.IdInternal = @streamIdInternal
     END;
-COMMIT TRANSACTION CreateStream;
+
 
 /* Select CurrentVersion, CurrentPosition */
 

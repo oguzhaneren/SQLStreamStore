@@ -1,4 +1,3 @@
-BEGIN TRANSACTION DeleteStream
 
         DECLARE @streamIdInternal AS INT
 
@@ -13,4 +12,3 @@ BEGIN TRANSACTION DeleteStream
           WHERE dbo.Streams.Id = @streamId;
          SELECT @@ROWCOUNT 
 
-COMMIT TRANSACTION DeleteStream

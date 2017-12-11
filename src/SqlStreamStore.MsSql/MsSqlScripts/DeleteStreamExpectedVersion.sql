@@ -1,4 +1,4 @@
-BEGIN TRANSACTION DeleteStream
+
         DECLARE @streamIdInternal AS INT;
         DECLARE @latestStreamVersion  AS INT;
 
@@ -30,4 +30,3 @@ BEGIN TRANSACTION DeleteStream
          DELETE FROM dbo.Streams
           WHERE dbo.Streams.Id = @streamId;
 
-COMMIT TRANSACTION DeleteStream

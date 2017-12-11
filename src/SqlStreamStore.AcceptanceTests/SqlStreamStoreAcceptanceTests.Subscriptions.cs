@@ -405,7 +405,7 @@
                     string streamId1 = "stream-1";
                     await AppendMessages(store, streamId1, 2);
 
-                    var subscriptionCount = 500;
+                    var subscriptionCount = 100;
 
                     var completionSources =
                         Enumerable.Range(0, subscriptionCount).Select(_ => new TaskCompletionSource<int>())

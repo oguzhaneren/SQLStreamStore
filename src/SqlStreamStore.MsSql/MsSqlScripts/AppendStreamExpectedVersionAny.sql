@@ -1,13 +1,12 @@
 DECLARE @streamIdInternal AS INT;
 
-BEGIN TRANSACTION CreateStreamIfNotExists;
+
     IF NOT EXISTS (SELECT * FROM dbo.Streams WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
                      WHERE dbo.Streams.Id = @streamId)
      INSERT INTO dbo.Streams (Id, IdOriginal) VALUES (@streamId, @streamIdOriginal);
 
-COMMIT TRANSACTION CreateStreamIfNotExists;
 
-BEGIN TRANSACTION AppendStream;
+
     DECLARE @latestStreamVersion AS INT;
 	DECLARE @latestStreamPosition AS BIGINT;
 
@@ -42,7 +41,7 @@ INSERT INTO dbo.Messages (StreamIdInternal, StreamVersion, Id, Created, [Type], 
             dbo.Streams.[Position] = @latestStreamPosition
       WHERE dbo.Streams.IdInternal = @streamIdInternal
 
-COMMIT TRANSACTION AppendStream;
+
 
 /* Select CurrentVersion, CurrentPosition */
 

@@ -42,11 +42,12 @@
 
             MsSqlAppendResult result;
 
-            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var session = await _sessionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
                 var streamIdInfo = new StreamIdInfo(streamId);
                 result = await AppendToStreamInternal(session, streamIdInfo.SqlStreamId, expectedVersion,
                     messages, cancellationToken);
+                session.Complete();
             }
 
             if(result.MaxCount.HasValue)

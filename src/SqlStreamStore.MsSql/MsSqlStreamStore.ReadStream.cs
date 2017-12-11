@@ -19,7 +19,7 @@
             ReadNextStreamPage readNext,
             CancellationToken cancellationToken)
         {
-            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var session = await _sessionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
                 var streamIdInfo = new StreamIdInfo(streamId);
                 return await ReadStreamInternal(streamIdInfo.SqlStreamId, start, count, ReadDirection.Forward,
@@ -35,7 +35,7 @@
             ReadNextStreamPage readNext,
             CancellationToken cancellationToken)
         {
-            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var session = await _sessionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
                 var streamIdInfo = new StreamIdInfo(streamId);
                 return await ReadStreamInternal(streamIdInfo.SqlStreamId, start, count, ReadDirection.Backward,
@@ -176,7 +176,7 @@
 
         private async Task<string> GetJsonData(string streamId, int streamVersion, CancellationToken cancellationToken)
         {
-            using(var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using(var session = await _sessionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
                 using(var command = session.CreateCommand(_scripts.ReadMessageData))
                 {

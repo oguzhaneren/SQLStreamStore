@@ -12,10 +12,144 @@
     using SqlStreamStore.MsSqlScripts;
     using SqlStreamStore.Subscriptions;
 
-    public interface IDatabaseSession
-        :IDisposable
+    public class TransactionalDatabaseSessionWrapper
+        : IDatabaseSession
     {
-        SqlCommand Commands { get; }
+        readonly SqlConnection _connection;
+        readonly bool _managedExternally;
+
+        SqlTransaction _currentTransaction;
+        bool _disposed;
+
+        /// <summary>
+        /// Constructs the wrapper, wrapping the given connection and transaction. It must be indicated with <paramref name="managedExternally"/> whether this wrapper
+        /// should commit/rollback the transaction (depending on whether <see cref="Complete"/> is called before <see cref="Dispose()"/>), or if the transaction
+        /// is handled outside of the wrapper
+        /// </summary>
+        public TransactionalDatabaseSessionWrapper(SqlConnection connection, SqlTransaction currentTransaction, bool managedExternally)
+        {
+            _connection = connection;
+            _currentTransaction = currentTransaction;
+            _managedExternally = managedExternally;
+
+        }
+
+        /// <summary>
+        /// Creates a ready to used <see cref="SqlCommand"/>
+        /// </summary>
+        public SqlCommand CreateCommand(string commandText)
+        {
+            var sqlCommand = _connection.CreateCommand();
+            sqlCommand.CommandText = commandText;
+            sqlCommand.Transaction = _currentTransaction;
+            return sqlCommand;
+        }
+
+        public SqlConnection Connection => _connection;
+        public SqlTransaction Transaction => _currentTransaction;
+
+
+        /// <summary>
+        /// Marks that all work has been successfully done and the <see cref="SqlConnection"/> may have its transaction committed or whatever is natural to do at this time
+        /// </summary>
+        public void Complete()
+        {
+            if (_managedExternally) return;
+
+            if (_currentTransaction == null)
+                return;
+
+            using (_currentTransaction)
+            {
+                _currentTransaction.Commit();
+                _currentTransaction = null;
+            }
+        }
+
+        /// <summary>
+        /// Finishes the transaction and disposes the connection in order to return it to the connection pool. If the transaction
+        /// has not been committed (by calling <see cref="Complete"/>), the transaction will be rolled back.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_managedExternally) return;
+            if (_disposed) return;
+
+            try
+            {
+                try
+                {
+                    if (_currentTransaction != null)
+                    {
+                        using (_currentTransaction)
+                        {
+                            try
+                            {
+                                _currentTransaction.Rollback();
+                            }
+                            catch { }
+                            _currentTransaction = null;
+                        }
+                    }
+                }
+                finally
+                {
+                    _connection.Dispose();
+                }
+            }
+            finally
+            {
+                _disposed = true;
+            }
+        }
+    }
+
+    public class TransactionalDatabaseSessionFactory
+        : IDatabaseSessionFactory
+    {
+        private readonly string _connectionString;
+        private readonly IsolationLevel _isolationLevel;
+        private readonly bool _externallyManagedTransactions;
+
+        public TransactionalDatabaseSessionFactory(string connectionString, IsolationLevel isolationLevel = IsolationLevel.ReadCommitted, bool externallyManagedTransactions = false)
+        {
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                throw new ArgumentException("message", nameof(connectionString));
+            }
+
+            _connectionString = connectionString;
+            _isolationLevel = isolationLevel;
+            _externallyManagedTransactions = externallyManagedTransactions;
+        }
+
+        public async Task<IDatabaseSession> Create(CancellationToken cancellationToken)
+        {
+            SqlConnection connection = null;
+
+            try
+            {
+
+                connection = new SqlConnection(_connectionString);
+                connection.Open();
+
+                var transaction = connection.BeginTransaction(_isolationLevel);
+
+                var conn = new TransactionalDatabaseSessionWrapper(connection, transaction, _externallyManagedTransactions);
+                return await Task.FromResult(conn);
+            }
+            catch (Exception)
+            {
+                connection?.Dispose();
+                throw;
+            }
+        }
+    }
+
+    public interface IDatabaseSession
+        : IDisposable
+    {
+
         SqlConnection Connection { get; }
         SqlTransaction Transaction { get; }
 
@@ -24,7 +158,7 @@
         SqlCommand CreateCommand(string commandText);
     }
 
-    public interface IDatabaseConnectionFactory
+    public interface IDatabaseSessionFactory
     {
         Task<IDatabaseSession> Create(CancellationToken cancellationToken);
     }
@@ -35,8 +169,10 @@
     /// </summary>
     public sealed partial class MsSqlStreamStore : StreamStoreBase
     {
-       // private readonly Func<SqlConnection> _createConnection;
-        private readonly IDatabaseConnectionFactory _connectionFactory;
+        private readonly MsSqlStreamStoreSettings _settings;
+
+        // private readonly Func<SqlConnection> _createConnection;
+        private readonly IDatabaseSessionFactory _sessionFactory;
         private readonly Lazy<IStreamStoreNotifier> _streamStoreNotifier;
         private readonly Scripts _scripts;
         private readonly SqlMetaData[] _appendToStreamSqlMetadata;
@@ -48,15 +184,18 @@
         /// </summary>
         /// <param name="settings">A settings class to configur this instance.</param>
         public MsSqlStreamStore(MsSqlStreamStoreSettings settings)
-            :base(settings.MetadataMaxAgeCacheExpire, settings.MetadataMaxAgeCacheMaxSize,
+            : base(settings.MetadataMaxAgeCacheExpire, settings.MetadataMaxAgeCacheMaxSize,
                  settings.GetUtcNow, settings.LogName)
         {
+            _settings = settings;
             Ensure.That(settings, nameof(settings)).IsNotNull();
 
-          //  _createConnection = () => new SqlConnection(settings.ConnectionString);
+            _sessionFactory = new TransactionalDatabaseSessionFactory(settings.ConnectionString);
+
+
             _streamStoreNotifier = new Lazy<IStreamStoreNotifier>(() =>
                 {
-                    if(settings.CreateStreamStoreNotifier == null)
+                    if (settings.CreateStreamStoreNotifier == null)
                     {
                         throw new InvalidOperationException(
                             "Cannot create notifier because supplied createStreamStoreNotifier was null");
@@ -75,7 +214,7 @@
                 new SqlMetaData("JsonMetadata", SqlDbType.NVarChar, SqlMetaData.Max)
             };
 
-            if(settings.GetUtcNow != null)
+            if (settings.GetUtcNow != null)
             {
                 // Created column value will be client supplied so should prevent using of the column default function
                 sqlMetaData[2] = new SqlMetaData("Created", SqlDbType.DateTime);
@@ -93,13 +232,13 @@
         {
             GuardAgainstDisposed();
 
-            using(var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var conn = new SqlConnection(_settings.ConnectionString))
             {
-              
+                await conn.OpenAsync(cancellationToken).NotOnCapturedContext();
 
-                if(_scripts.Schema != "dbo")
+                if (_scripts.Schema != "dbo")
                 {
-                    using(var command = session.CreateCommand($@"
+                    using (var command =new SqlCommand($@"
                         IF NOT EXISTS (
                         SELECT  schema_name
                         FROM    information_schema.schemata
@@ -107,7 +246,7 @@
 
                         BEGIN
                         EXEC sp_executesql N'CREATE SCHEMA {_scripts.Schema}'
-                        END"))
+                        END",conn))
                     {
                         await command
                             .ExecuteNonQueryAsync(cancellationToken)
@@ -115,11 +254,12 @@
                     }
                 }
 
-                using (var command = session.CreateCommand(_scripts.CreateSchema))
+                using (var command = new SqlCommand(_scripts.CreateSchema,conn))
                 {
                     await command.ExecuteNonQueryAsync(cancellationToken)
                         .NotOnCapturedContext();
                 }
+               
             }
         }
 
@@ -127,13 +267,13 @@
         {
             GuardAgainstDisposed();
 
-            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var conn = new SqlConnection(_settings.ConnectionString))
             {
-                
+                await conn.OpenAsync(cancellationToken).NotOnCapturedContext();
 
                 if (_scripts.Schema != "dbo")
                 {
-                    using (var command =session.CreateCommand($@"
+                    using (var command = new SqlCommand($@"
                         IF NOT EXISTS (
                         SELECT  schema_name
                         FROM    information_schema.schemata
@@ -141,7 +281,7 @@
 
                         BEGIN
                         EXEC sp_executesql N'CREATE SCHEMA {_scripts.Schema}'
-                        END"))
+                        END",conn))
                     {
                         await command
                             .ExecuteNonQueryAsync(cancellationToken)
@@ -149,7 +289,7 @@
                     }
                 }
 
-                using (var command = session.CreateCommand(_scripts.CreateSchema_v1))
+                using (var command = new SqlCommand(_scripts.CreateSchema_v1,conn))
                 {
                     await command.ExecuteNonQueryAsync(cancellationToken)
                         .NotOnCapturedContext();
@@ -167,24 +307,24 @@
         {
             GuardAgainstDisposed();
 
-            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var session = await _sessionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
                 using (var command = session.CreateCommand(_scripts.GetSchemaVersion))
                 {
-                    var extendedProperties =  await command
+                    var extendedProperties = await command
                         .ExecuteReaderAsync(cancellationToken)
                         .NotOnCapturedContext();
 
                     int? version = null;
-                    while(await extendedProperties.ReadAsync(cancellationToken))
+                    while (await extendedProperties.ReadAsync(cancellationToken))
                     {
-                        if(extendedProperties.GetString(0) != "version")
+                        if (extendedProperties.GetString(0) != "version")
                             continue;
                         version = int.Parse(extendedProperties.GetString(1));
                         break;
                     }
 
-                    return version == null 
+                    return version == null
                         ? new CheckSchemaResult(FirstSchemaVersion, CurrentSchemaVersion)  // First schema (1) didn't have extended properties.
                         : new CheckSchemaResult(int.Parse(version.ToString()), CurrentSchemaVersion);
                 }
@@ -200,13 +340,14 @@
         {
             GuardAgainstDisposed();
 
-            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var session = await _sessionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                using(var command = session.CreateCommand(_scripts.DropAll))
+                using (var command = session.CreateCommand(_scripts.DropAll))
                 {
                     await command
                         .ExecuteNonQueryAsync(cancellationToken)
                         .NotOnCapturedContext();
+                    session.Complete();
                 }
             }
         }
@@ -218,9 +359,9 @@
         {
             GuardAgainstDisposed();
 
-            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var session = await _sessionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                using(var command = session.CreateCommand(_scripts.GetStreamMessageCount))
+                using (var command = session.CreateCommand(_scripts.GetStreamMessageCount))
                 {
                     var streamIdInfo = new StreamIdInfo(streamId);
                     command.Parameters.AddWithValue("streamId", streamIdInfo.SqlStreamId.Id);
@@ -229,7 +370,7 @@
                         .ExecuteScalarAsync(cancellationToken)
                         .NotOnCapturedContext();
 
-                    return (int) result;
+                    return (int)result;
                 }
             }
         }
@@ -241,7 +382,7 @@
         {
             GuardAgainstDisposed();
 
-            using(var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var session = await _sessionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
                 using (var command = session.CreateCommand(_scripts.GetStreamMessageBeforeCreatedCount))
                 {
@@ -262,30 +403,30 @@
         {
             GuardAgainstDisposed();
 
-            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var session = await _sessionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-               
 
-                using(var command = session.CreateCommand(_scripts.ReadHeadPosition))
+
+                using (var command = session.CreateCommand(_scripts.ReadHeadPosition))
                 {
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
                         .NotOnCapturedContext();
 
-                    if(result == DBNull.Value)
+                    if (result == DBNull.Value)
                     {
                         return -1;
                     }
-                    return (long) result;
+                    return (long)result;
                 }
             }
         }
 
         protected override void Dispose(bool disposing)
         {
-            if(disposing)
+            if (disposing)
             {
-                if(_streamStoreNotifier.IsValueCreated)
+                if (_streamStoreNotifier.IsValueCreated)
                 {
                     _streamStoreNotifier.Value.Dispose();
                 }

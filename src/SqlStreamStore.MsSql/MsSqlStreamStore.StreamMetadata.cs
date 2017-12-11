@@ -16,7 +16,7 @@
             var streamIdInfo = new StreamIdInfo(streamId);
 
             ReadStreamPage page;
-            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var session = await _sessionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
                 page = await ReadStreamInternal(
                     streamIdInfo.MetadataSqlStreamId,
@@ -29,7 +29,7 @@
                     cancellationToken);
             }
 
-            if(page.Status == PageReadStatus.StreamNotFound)
+            if (page.Status == PageReadStatus.StreamNotFound)
             {
                 return new StreamMetadataResult(streamId, -1);
             }
@@ -53,30 +53,30 @@
             CancellationToken cancellationToken)
         {
             MsSqlAppendResult result;
-            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var session = await _sessionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
 
-               
-                    var streamIdInfo = new StreamIdInfo(streamId);
 
-                    var metadataMessage = new MetadataMessage
-                    {
-                        StreamId = streamId,
-                        MaxAge = maxAge,
-                        MaxCount = maxCount,
-                        MetaJson = metadataJson
-                    };
-                    var json = SimpleJson.SerializeObject(metadataMessage);
-                    var newmessage = new NewStreamMessage(Guid.NewGuid(), "$stream-metadata", json);
+                var streamIdInfo = new StreamIdInfo(streamId);
 
-                    result = await AppendToStreamInternal(
-                        session,
-                        streamIdInfo.MetadataSqlStreamId,
-                        expectedStreamMetadataVersion,
-                        new[] { newmessage },
-                        cancellationToken);
+                var metadataMessage = new MetadataMessage
+                {
+                    StreamId = streamId,
+                    MaxAge = maxAge,
+                    MaxCount = maxCount,
+                    MetaJson = metadataJson
+                };
+                var json = SimpleJson.SerializeObject(metadataMessage);
+                var newmessage = new NewStreamMessage(Guid.NewGuid(), "$stream-metadata", json);
 
-                  
+                result = await AppendToStreamInternal(
+                    session,
+                    streamIdInfo.MetadataSqlStreamId,
+                    expectedStreamMetadataVersion,
+                    new[] { newmessage },
+                    cancellationToken);
+                session.Complete();
+
             }
 
             await CheckStreamMaxCount(streamId, maxCount, cancellationToken);

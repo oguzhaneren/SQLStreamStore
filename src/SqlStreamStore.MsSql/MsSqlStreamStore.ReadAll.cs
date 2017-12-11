@@ -21,7 +21,7 @@
             maxCount = maxCount == int.MaxValue ? maxCount - 1 : maxCount;
             long ordinal = fromPositionExlusive;
 
-            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var session = await _sessionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
                 var commandText = prefetch ? _scripts.ReadAllForwardWithData : _scripts.ReadAllForward;
                 using (var command = session.CreateCommand(commandText))
@@ -116,7 +116,7 @@
             maxCount = maxCount == int.MaxValue ? maxCount - 1 : maxCount;
             long ordinal = fromPositionExclusive == Position.End ? long.MaxValue : fromPositionExclusive;
 
-            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
+            using (var session = await _sessionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
                 var commandText = prefetch ? _scripts.ReadAllBackwardWithData : _scripts.ReadAllBackward;
                 using (var command = session.CreateCommand(commandText))
