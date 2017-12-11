@@ -19,12 +19,11 @@
             ReadNextStreamPage readNext,
             CancellationToken cancellationToken)
         {
-            using (var connection = _createConnection())
+            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                await connection.OpenAsync(cancellationToken).NotOnCapturedContext();
                 var streamIdInfo = new StreamIdInfo(streamId);
                 return await ReadStreamInternal(streamIdInfo.SqlStreamId, start, count, ReadDirection.Forward,
-                    prefetch, readNext, connection, cancellationToken);
+                    prefetch, readNext, session, cancellationToken);
             }
         }
 
@@ -36,12 +35,11 @@
             ReadNextStreamPage readNext,
             CancellationToken cancellationToken)
         {
-            using (var connection = _createConnection())
+            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                await connection.OpenAsync(cancellationToken).NotOnCapturedContext();
                 var streamIdInfo = new StreamIdInfo(streamId);
                 return await ReadStreamInternal(streamIdInfo.SqlStreamId, start, count, ReadDirection.Backward,
-                    prefetch, readNext, connection, cancellationToken);
+                    prefetch, readNext, session, cancellationToken);
             }
         }
 
@@ -52,7 +50,7 @@
             ReadDirection direction,
             bool prefetch,
             ReadNextStreamPage readNext,
-            SqlConnection connection, CancellationToken cancellationToken)
+            IDatabaseSession session, CancellationToken cancellationToken)
         {
             // If the count is int.MaxValue, TSql will see it as a negative number. 
             // Users shouldn't be using int.MaxValue in the first place anyway.
@@ -87,7 +85,7 @@
                 };
             }
 
-            using(var command = new SqlCommand(commandText, connection))
+            using(var command = session.CreateCommand(commandText))
             {
                 command.Parameters.AddWithValue("streamId", sqlStreamId.Id);
                 command.Parameters.AddWithValue("count", count + 1); //Read extra row to see if at end or not
@@ -178,10 +176,9 @@
 
         private async Task<string> GetJsonData(string streamId, int streamVersion, CancellationToken cancellationToken)
         {
-            using(var connection = _createConnection())
+            using(var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                await connection.OpenAsync(cancellationToken).NotOnCapturedContext();
-                using(var command = new SqlCommand(_scripts.ReadMessageData, connection))
+                using(var command = session.CreateCommand(_scripts.ReadMessageData))
                 {
                     command.Parameters.AddWithValue("streamId", streamId);
                     command.Parameters.AddWithValue("streamVersion", streamVersion);

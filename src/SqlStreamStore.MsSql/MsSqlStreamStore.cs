@@ -12,12 +12,31 @@
     using SqlStreamStore.MsSqlScripts;
     using SqlStreamStore.Subscriptions;
 
+    public interface IDatabaseSession
+        :IDisposable
+    {
+        SqlCommand Commands { get; }
+        SqlConnection Connection { get; }
+        SqlTransaction Transaction { get; }
+
+        void Complete();
+
+        SqlCommand CreateCommand(string commandText);
+    }
+
+    public interface IDatabaseConnectionFactory
+    {
+        Task<IDatabaseSession> Create(CancellationToken cancellationToken);
+    }
+
+
     /// <summary>
     ///     Represents a Micrsoft SQL Server stream store implementation.
     /// </summary>
     public sealed partial class MsSqlStreamStore : StreamStoreBase
     {
-        private readonly Func<SqlConnection> _createConnection;
+       // private readonly Func<SqlConnection> _createConnection;
+        private readonly IDatabaseConnectionFactory _connectionFactory;
         private readonly Lazy<IStreamStoreNotifier> _streamStoreNotifier;
         private readonly Scripts _scripts;
         private readonly SqlMetaData[] _appendToStreamSqlMetadata;
@@ -34,7 +53,7 @@
         {
             Ensure.That(settings, nameof(settings)).IsNotNull();
 
-            _createConnection = () => new SqlConnection(settings.ConnectionString);
+          //  _createConnection = () => new SqlConnection(settings.ConnectionString);
             _streamStoreNotifier = new Lazy<IStreamStoreNotifier>(() =>
                 {
                     if(settings.CreateStreamStoreNotifier == null)
@@ -74,13 +93,13 @@
         {
             GuardAgainstDisposed();
 
-            using(var connection = _createConnection())
+            using(var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                await connection.OpenAsync(cancellationToken).NotOnCapturedContext();
+              
 
                 if(_scripts.Schema != "dbo")
                 {
-                    using(var command = new SqlCommand($@"
+                    using(var command = session.CreateCommand($@"
                         IF NOT EXISTS (
                         SELECT  schema_name
                         FROM    information_schema.schemata
@@ -88,7 +107,7 @@
 
                         BEGIN
                         EXEC sp_executesql N'CREATE SCHEMA {_scripts.Schema}'
-                        END", connection))
+                        END"))
                     {
                         await command
                             .ExecuteNonQueryAsync(cancellationToken)
@@ -96,7 +115,7 @@
                     }
                 }
 
-                using (var command = new SqlCommand(_scripts.CreateSchema, connection))
+                using (var command = session.CreateCommand(_scripts.CreateSchema))
                 {
                     await command.ExecuteNonQueryAsync(cancellationToken)
                         .NotOnCapturedContext();
@@ -108,13 +127,13 @@
         {
             GuardAgainstDisposed();
 
-            using (var connection = _createConnection())
+            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                await connection.OpenAsync(cancellationToken).NotOnCapturedContext();
+                
 
                 if (_scripts.Schema != "dbo")
                 {
-                    using (var command = new SqlCommand($@"
+                    using (var command =session.CreateCommand($@"
                         IF NOT EXISTS (
                         SELECT  schema_name
                         FROM    information_schema.schemata
@@ -122,7 +141,7 @@
 
                         BEGIN
                         EXEC sp_executesql N'CREATE SCHEMA {_scripts.Schema}'
-                        END", connection))
+                        END"))
                     {
                         await command
                             .ExecuteNonQueryAsync(cancellationToken)
@@ -130,7 +149,7 @@
                     }
                 }
 
-                using (var command = new SqlCommand(_scripts.CreateSchema_v1, connection))
+                using (var command = session.CreateCommand(_scripts.CreateSchema_v1))
                 {
                     await command.ExecuteNonQueryAsync(cancellationToken)
                         .NotOnCapturedContext();
@@ -148,11 +167,9 @@
         {
             GuardAgainstDisposed();
 
-            using(var connection = _createConnection())
+            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                await connection.OpenAsync(cancellationToken).NotOnCapturedContext();
-
-                using (var command = new SqlCommand(_scripts.GetSchemaVersion, connection))
+                using (var command = session.CreateCommand(_scripts.GetSchemaVersion))
                 {
                     var extendedProperties =  await command
                         .ExecuteReaderAsync(cancellationToken)
@@ -183,11 +200,9 @@
         {
             GuardAgainstDisposed();
 
-            using(var connection = _createConnection())
+            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                await connection.OpenAsync(cancellationToken).NotOnCapturedContext();
-
-                using(var command = new SqlCommand(_scripts.DropAll, connection))
+                using(var command = session.CreateCommand(_scripts.DropAll))
                 {
                     await command
                         .ExecuteNonQueryAsync(cancellationToken)
@@ -203,11 +218,9 @@
         {
             GuardAgainstDisposed();
 
-            using(var connection = _createConnection())
+            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                await connection.OpenAsync(cancellationToken).NotOnCapturedContext();
-
-                using(var command = new SqlCommand(_scripts.GetStreamMessageCount, connection))
+                using(var command = session.CreateCommand(_scripts.GetStreamMessageCount))
                 {
                     var streamIdInfo = new StreamIdInfo(streamId);
                     command.Parameters.AddWithValue("streamId", streamIdInfo.SqlStreamId.Id);
@@ -228,11 +241,9 @@
         {
             GuardAgainstDisposed();
 
-            using (var connection = _createConnection())
+            using(var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                await connection.OpenAsync(cancellationToken).NotOnCapturedContext();
-
-                using (var command = new SqlCommand(_scripts.GetStreamMessageBeforeCreatedCount, connection))
+                using (var command = session.CreateCommand(_scripts.GetStreamMessageBeforeCreatedCount))
                 {
                     var streamIdInfo = new StreamIdInfo(streamId);
                     command.Parameters.AddWithValue("streamId", streamIdInfo.SqlStreamId.Id);
@@ -251,11 +262,11 @@
         {
             GuardAgainstDisposed();
 
-            using(var connection = _createConnection())
+            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                await connection.OpenAsync(cancellationToken).NotOnCapturedContext();
+               
 
-                using(var command = new SqlCommand(_scripts.ReadHeadPosition, connection))
+                using(var command = session.CreateCommand(_scripts.ReadHeadPosition))
                 {
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)

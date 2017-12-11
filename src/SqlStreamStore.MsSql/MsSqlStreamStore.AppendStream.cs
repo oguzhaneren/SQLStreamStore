@@ -41,11 +41,11 @@
             GuardAgainstDisposed();
 
             MsSqlAppendResult result;
-            using(var connection = _createConnection())
+
+            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                await connection.OpenAsync(cancellationToken).NotOnCapturedContext();
                 var streamIdInfo = new StreamIdInfo(streamId);
-                result = await AppendToStreamInternal(connection, null, streamIdInfo.SqlStreamId, expectedVersion,
+                result = await AppendToStreamInternal(session, streamIdInfo.SqlStreamId, expectedVersion,
                     messages, cancellationToken);
             }
 
@@ -58,8 +58,7 @@
         }
 
         private Task<MsSqlAppendResult> AppendToStreamInternal(
-           SqlConnection connection,
-           SqlTransaction transaction,
+           IDatabaseSession session,
            SqlStreamId sqlStreamId,
            int expectedVersion,
            NewStreamMessage[] messages,
@@ -72,8 +71,7 @@
                 if(expectedVersion == ExpectedVersion.Any)
                 {
                     return AppendToStreamExpectedVersionAny(
-                        connection,
-                        transaction,
+                        session,
                         sqlStreamId,
                         messages,
                         cancellationToken);
@@ -81,15 +79,13 @@
                 if(expectedVersion == ExpectedVersion.NoStream)
                 {
                     return AppendToStreamExpectedVersionNoStream(
-                        connection,
-                        transaction,
+                        session,
                         sqlStreamId,
                         messages,
                         cancellationToken);
                 }
                 return  AppendToStreamExpectedVersion(
-                    connection,
-                    transaction,
+                    session,
                     sqlStreamId,
                     expectedVersion,
                     messages,
@@ -123,13 +119,12 @@
         }
 
         private async Task<MsSqlAppendResult> AppendToStreamExpectedVersionAny(
-            SqlConnection connection,
-            SqlTransaction transaction,
+            IDatabaseSession session,
             SqlStreamId sqlStreamId,
             NewStreamMessage[] messages,
             CancellationToken cancellationToken)
         {
-            using(var command = new SqlCommand(_scripts.AppendStreamExpectedVersionAny, connection, transaction))
+            using(var command = session.CreateCommand(_scripts.AppendStreamExpectedVersionAny))
             {
                 command.Parameters.AddWithValue("streamId", sqlStreamId.Id);
                 command.Parameters.AddWithValue("streamIdOriginal", sqlStreamId.IdOriginal);
@@ -176,8 +171,7 @@
                     when(ex.IsUniqueConstraintViolationOnIndex("IX_Messages_StreamIdInternal_Id"))
                 {
                     var streamVersion = await GetStreamVersionOfMessageId(
-                        connection,
-                        transaction,
+                        session,
                         sqlStreamId,
                         messages[0].MessageId,
                         cancellationToken);
@@ -190,7 +184,7 @@
                         ReadDirection.Forward,
                         false,
                         null,
-                        connection,
+                        session,
                         cancellationToken)
                         .NotOnCapturedContext();
 
@@ -225,13 +219,12 @@
         }
 
         private async Task<MsSqlAppendResult> AppendToStreamExpectedVersionNoStream(
-            SqlConnection connection,
-            SqlTransaction transaction,
+           IDatabaseSession session,
             SqlStreamId sqlStreamId,
             NewStreamMessage[] messages,
             CancellationToken cancellationToken)
         {
-            using(var command = new SqlCommand(_scripts.AppendStreamExpectedVersionNoStream, connection, transaction))
+            using(var command = session.CreateCommand(_scripts.AppendStreamExpectedVersionNoStream))
             {
                 command.Parameters.AddWithValue("streamId", sqlStreamId.Id);
                 command.Parameters.AddWithValue("streamIdOriginal", sqlStreamId.IdOriginal);
@@ -283,7 +276,7 @@
                                 ReadDirection.Forward,
                                 false,
                                 null,
-                                connection,
+                                session,
                                 cancellationToken)
                             .NotOnCapturedContext();
 
@@ -326,8 +319,7 @@
         }
 
         private async Task<MsSqlAppendResult> AppendToStreamExpectedVersion(
-            SqlConnection connection,
-            SqlTransaction transaction,
+            IDatabaseSession session,
             SqlStreamId sqlStreamId,
             int expectedVersion,
             NewStreamMessage[] messages,
@@ -335,7 +327,7 @@
         {
             var sqlDataRecords = CreateSqlDataRecords(messages);
 
-            using(var command = new SqlCommand(_scripts.AppendStreamExpectedVersion, connection, transaction))
+            using(var command = session.CreateCommand(_scripts.AppendStreamExpectedVersion))
             {
                 command.Parameters.AddWithValue("streamId", sqlStreamId.Id);
                 command.Parameters.AddWithValue("expectedStreamVersion", expectedVersion);
@@ -382,7 +374,7 @@
                                 ReadDirection.Forward,
                                 false,
                                 null,
-                                connection,
+                                session,
                                 cancellationToken);
 
                             if(messages.Length > page.Messages.Length)
@@ -444,13 +436,12 @@
         }
 
         private async Task<int> GetStreamVersionOfMessageId(
-            SqlConnection connection,
-            SqlTransaction transaction,
+            IDatabaseSession databaseSession,
             SqlStreamId sqlStreamId,
             Guid messageId,
             CancellationToken cancellationToken)
         {
-            using(var command = new SqlCommand(_scripts.GetStreamVersionOfMessageId, connection, transaction))
+            using(var command = databaseSession.CreateCommand(_scripts.GetStreamVersionOfMessageId))
             {
                 command.Parameters.AddWithValue("streamId", sqlStreamId.Id);
                 command.Parameters.AddWithValue("messageId", messageId);

@@ -16,9 +16,8 @@
             var streamIdInfo = new StreamIdInfo(streamId);
 
             ReadStreamPage page;
-            using (var connection = _createConnection())
+            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                await connection.OpenAsync(cancellationToken).NotOnCapturedContext();
                 page = await ReadStreamInternal(
                     streamIdInfo.MetadataSqlStreamId,
                     StreamVersion.End,
@@ -26,7 +25,7 @@
                     ReadDirection.Backward,
                     true,
                     null,
-                    connection,
+                    session,
                     cancellationToken);
             }
 
@@ -54,12 +53,10 @@
             CancellationToken cancellationToken)
         {
             MsSqlAppendResult result;
-            using(var connection = _createConnection())
+            using (var session = await _connectionFactory.Create(cancellationToken).NotOnCapturedContext())
             {
-                await connection.OpenAsync(cancellationToken).NotOnCapturedContext();
 
-                using(var transaction = connection.BeginTransaction())
-                {
+               
                     var streamIdInfo = new StreamIdInfo(streamId);
 
                     var metadataMessage = new MetadataMessage
@@ -73,15 +70,13 @@
                     var newmessage = new NewStreamMessage(Guid.NewGuid(), "$stream-metadata", json);
 
                     result = await AppendToStreamInternal(
-                        connection,
-                        transaction,
+                        session,
                         streamIdInfo.MetadataSqlStreamId,
                         expectedStreamMetadataVersion,
                         new[] { newmessage },
                         cancellationToken);
 
-                    transaction.Commit();
-                }
+                  
             }
 
             await CheckStreamMaxCount(streamId, maxCount, cancellationToken);
