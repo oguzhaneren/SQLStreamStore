@@ -11,6 +11,8 @@ namespace SqlStreamStore.InMemory
             return Task.FromResult(streamStore);
         }
 
+       
+
         public override long MinPosition => 0;
     }
 }

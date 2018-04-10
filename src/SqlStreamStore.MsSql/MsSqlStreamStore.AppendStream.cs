@@ -8,6 +8,7 @@
     using System.Threading;
     using System.Threading.Tasks;
     using Microsoft.SqlServer.Server;
+    using SqlStreamStore.Connection;
     using SqlStreamStore.Imports.Ensure.That;
     using SqlStreamStore.Streams;
     using SqlStreamStore.Infrastructure;

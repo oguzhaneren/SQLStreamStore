@@ -405,29 +405,29 @@
                     string streamId1 = "stream-1";
                     await AppendMessages(store, streamId1, 2);
 
-                    var subscriptionCount = 100;
+                    var subscriptionCount = 50;
 
                     var completionSources =
                         Enumerable.Range(0, subscriptionCount).Select(_ => new TaskCompletionSource<int>())
-                        .ToArray();
+                                  .ToArray();
 
                     var subscriptions = Enumerable.Range(0, subscriptionCount)
-                        .Select(index => store.SubscribeToAll(
-                            Position.None,
-                            (_, message) =>
-                            {
-                                if(message.StreamVersion == 1)
-                                {
-                                    completionSources[index].SetResult(0);
-                                }
-                                return Task.CompletedTask;
-                            }))
-                        .ToArray();
+                                                  .Select(index => store.SubscribeToAll(
+                                                      Position.None,
+                                                      (_, message) =>
+                                                      {
+                                                          if (message.StreamVersion == 1)
+                                                          {
+                                                              completionSources[index].SetResult(0);
+                                                          }
+                                                          return Task.CompletedTask;
+                                                      }))
+                                                  .ToArray();
 
 
                     try
                     {
-                        await Task.WhenAll(completionSources.Select(source => source.Task)).WithTimeout();
+                        await Task.WhenAll(completionSources.Select(source => source.Task)).WithTimeout(50000);
                     }
                     finally
                     {
@@ -470,7 +470,7 @@
 
                     try
                     {
-                        await Task.WhenAll(completionSources.Select(source => source.Task)).WithTimeout();
+                        await Task.WhenAll(completionSources.Select(source => source.Task)).WithTimeout(timeout:50000);
                     }
                     finally
                     {

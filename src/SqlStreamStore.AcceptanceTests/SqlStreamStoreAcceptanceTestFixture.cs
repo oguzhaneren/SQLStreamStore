@@ -7,8 +7,14 @@ namespace SqlStreamStore
     public abstract class StreamStoreAcceptanceTestFixture : IDisposable
     {
         public abstract Task<IStreamStore> GetStreamStore();
+      
 
         public GetUtcNow GetUtcNow { get; set; } = SystemClock.GetUtcNow;
+
+        public virtual void Commit()
+        {
+
+        }
 
         public virtual void Dispose()
         {}

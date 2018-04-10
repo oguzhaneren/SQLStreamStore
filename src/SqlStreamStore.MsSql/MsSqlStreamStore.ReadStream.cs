@@ -6,6 +6,7 @@
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using SqlStreamStore.Connection;
     using SqlStreamStore.Streams;
     using SqlStreamStore.Infrastructure;
 

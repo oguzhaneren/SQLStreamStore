@@ -1,8 +1,11 @@
 namespace SqlStreamStore
 {
     using System;
+    using System.Data;
     using System.Data.SqlClient;
+    using System.IO;
     using System.Threading.Tasks;
+    using SqlStreamStore.Connection;
     using SqlStreamStore.Infrastructure;
 
     public class MsSqlStreamStoreFixture : StreamStoreAcceptanceTestFixture
@@ -17,7 +20,8 @@ namespace SqlStreamStore
             _schema = schema;
             _localInstance = new LocalInstance();
 
-            var uniqueName = Guid.NewGuid().ToString().Replace("-", string.Empty);
+            //var uniqueName = Guid.NewGuid().ToString().Replace("-", string.Empty);
+            var uniqueName = Path.GetRandomFileName().Replace(".", string.Empty);
             _databaseName = $"StreamStoreTests-{uniqueName}";
 
             ConnectionString = CreateConnectionString();
@@ -32,6 +36,7 @@ namespace SqlStreamStore
             return await GetStreamStore(_schema);
         }
 
+       
         Tuple<SqlConnection, SqlTransaction> _connectionTuple = null;
         private object _lock = new object();
 
@@ -39,11 +44,11 @@ namespace SqlStreamStore
         {
             var factory = new ExternalyManagedDatabaseSessionFactory(() =>
             {
-                if(_connectionTuple == null)
+                if (_connectionTuple == null)
                 {
-                    lock(_lock)
+                    lock (_lock)
                     {
-                        if(_connectionTuple == null)
+                        if (_connectionTuple == null)
                         {
                             var sqlConnection = new SqlConnection(ConnectionString);
                             sqlConnection.Open();
@@ -54,14 +59,14 @@ namespace SqlStreamStore
                     }
                 }
 
-                return _connectionTuple;
+                return Task.FromResult(_connectionTuple);
             });
 
             var settings = new MsSqlStreamStoreSettings(ConnectionString)
             {
                 Schema = schema,
                 GetUtcNow = () => GetUtcNow(),
-              Factory = factory
+                Factory = factory
             };
             var store = new MsSqlStreamStore(settings);
             await store.CreateSchema();
@@ -86,7 +91,7 @@ namespace SqlStreamStore
         public async Task<MsSqlStreamStore> GetUninitializedStreamStore()
         {
             await CreateDatabase();
-            
+
             return new MsSqlStreamStore(new MsSqlStreamStoreSettings(ConnectionString)
             {
                 Schema = _schema,
@@ -102,7 +107,7 @@ namespace SqlStreamStore
             {
                 Schema = _schema,
                 GetUtcNow = () => GetUtcNow(),
-                
+
             };
 
             var store = new MsSqlStreamStore(settings);
@@ -111,13 +116,24 @@ namespace SqlStreamStore
             return store;
         }
 
-        public override void Dispose()
+        public override void Commit()
         {
             _connectionTuple?.Item2.Commit();
             _connectionTuple?.Item2.Dispose();
             _connectionTuple?.Item1.Dispose();
+        }
 
-            using(var sqlConnection = new SqlConnection(ConnectionString))
+        public override void Dispose()
+        {
+            if(_connectionTuple?.Item1.State == ConnectionState.Open)
+            {
+                //_connectionTuple?.Item2.Commit();
+                _connectionTuple?.Item2.Dispose();
+                _connectionTuple?.Item1.Dispose();
+            }
+           
+
+            using (var sqlConnection = new SqlConnection(ConnectionString))
             {
                 // Fixes: "Cannot drop database because it is currently in use"
                 SqlConnection.ClearPool(sqlConnection);
@@ -139,7 +155,7 @@ namespace SqlStreamStore
 
         private async Task CreateDatabase()
         {
-            using(var connection = _localInstance.CreateConnection())
+            using (var connection = _localInstance.CreateConnection())
             {
                 await connection.OpenAsync().NotOnCapturedContext();
                 var tempPath = Environment.GetEnvironmentVariable("Temp");
@@ -161,6 +177,8 @@ namespace SqlStreamStore
 
             return connectionStringBuilder.ToString();
         }
+
+     
 
         private interface ILocalInstance
         {
