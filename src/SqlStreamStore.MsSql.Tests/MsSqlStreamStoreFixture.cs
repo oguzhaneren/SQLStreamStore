@@ -6,6 +6,7 @@ namespace SqlStreamStore
     using System.IO;
     using System.Threading.Tasks;
     using SqlStreamStore.Connection;
+    using SqlStreamStore.Connection.Impl;
     using SqlStreamStore.Infrastructure;
 
     public class MsSqlStreamStoreFixture : StreamStoreAcceptanceTestFixture
@@ -36,19 +37,34 @@ namespace SqlStreamStore
             return await GetStreamStore(_schema);
         }
 
-       
-        Tuple<SqlConnection, SqlTransaction> _connectionTuple = null;
-        private object _lock = new object();
+
+        private Tuple<SqlConnection, SqlTransaction> _connectionTuple = null;
+        private readonly object _lock = new object();
 
         public async Task<IStreamStore> GetStreamStore(string schema)
         {
+            var factory = GetSessionFactory();
+
+            var settings = new MsSqlStreamStoreSettings(ConnectionString, factory)
+            {
+                Schema = schema,
+                GetUtcNow = () => GetUtcNow()
+            };
+            var store = new MsSqlStreamStore(settings);
+            await store.CreateSchema();
+
+            return store;
+        }
+
+        private IDatabaseSessionFactory GetSessionFactory()
+        {
             var factory = new ExternalyManagedDatabaseSessionFactory(() =>
             {
-                if (_connectionTuple == null)
+                if(_connectionTuple == null)
                 {
-                    lock (_lock)
+                    lock(_lock)
                     {
-                        if (_connectionTuple == null)
+                        if(_connectionTuple == null)
                         {
                             var sqlConnection = new SqlConnection(ConnectionString);
                             sqlConnection.Open();
@@ -61,23 +77,13 @@ namespace SqlStreamStore
 
                 return Task.FromResult(_connectionTuple);
             });
-
-            var settings = new MsSqlStreamStoreSettings(ConnectionString)
-            {
-                Schema = schema,
-                GetUtcNow = () => GetUtcNow(),
-                Factory = factory
-            };
-            var store = new MsSqlStreamStore(settings);
-            await store.CreateSchema();
-
-            return store;
+            return factory;
         }
 
         public async Task<MsSqlStreamStore> GetStreamStore_v1Schema()
         {
             await CreateDatabase();
-            var settings = new MsSqlStreamStoreSettings(ConnectionString)
+            var settings = new MsSqlStreamStoreSettings(ConnectionString, GetSessionFactory())
             {
                 Schema = _schema,
                 GetUtcNow = () => GetUtcNow()
@@ -92,7 +98,7 @@ namespace SqlStreamStore
         {
             await CreateDatabase();
 
-            return new MsSqlStreamStore(new MsSqlStreamStoreSettings(ConnectionString)
+            return new MsSqlStreamStore(new MsSqlStreamStoreSettings(ConnectionString, GetSessionFactory())
             {
                 Schema = _schema,
                 GetUtcNow = () => GetUtcNow()
@@ -103,7 +109,7 @@ namespace SqlStreamStore
         {
             await CreateDatabase();
 
-            var settings = new MsSqlStreamStoreSettings(ConnectionString)
+            var settings = new MsSqlStreamStoreSettings(ConnectionString, GetSessionFactory())
             {
                 Schema = _schema,
                 GetUtcNow = () => GetUtcNow(),

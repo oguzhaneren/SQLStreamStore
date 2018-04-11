@@ -14,14 +14,13 @@
     using SqlStreamStore.Subscriptions;
 
 
+
     /// <summary>
     ///     Represents a Micrsoft SQL Server stream store implementation.
     /// </summary>
     public sealed partial class MsSqlStreamStore : StreamStoreBase
     {
         private readonly MsSqlStreamStoreSettings _settings;
-
-        // private readonly Func<SqlConnection> _createConnection;
         private readonly IDatabaseSessionFactory _sessionFactory;
         private readonly Lazy<IStreamStoreNotifier> _streamStoreNotifier;
         private readonly Scripts _scripts;
@@ -38,9 +37,10 @@
                  settings.GetUtcNow, settings.LogName)
         {
             _settings = settings;
+        
             Ensure.That(settings, nameof(settings)).IsNotNull();
-
-            _sessionFactory = settings.Factory;
+          
+            _sessionFactory = settings.SessionFactory;
 
 
             _streamStoreNotifier = new Lazy<IStreamStoreNotifier>(() =>

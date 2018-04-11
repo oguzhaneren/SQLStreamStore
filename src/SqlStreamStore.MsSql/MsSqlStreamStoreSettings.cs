@@ -1,6 +1,8 @@
 namespace SqlStreamStore
 {
     using System;
+    using System.Data.SqlClient;
+    using System.Threading.Tasks;
     using SqlStreamStore.Connection;
     using SqlStreamStore.Connection.Impl;
     using SqlStreamStore.Imports.Ensure.That;
@@ -14,16 +16,29 @@ namespace SqlStreamStore
     {
         private string _schema = "dbo";
 
+
+        public static MsSqlStreamStoreSettings WithStreamTransactionBoundary(string connectionString)
+        {
+            return new MsSqlStreamStoreSettings(connectionString, new TransactionalDatabaseSessionFactory(connectionString));
+        }
+
+        public static MsSqlStreamStoreSettings WithExternalyManagedTransaction(string connectionString, Func<Task<Tuple<SqlConnection, SqlTransaction>>> factory)
+        {
+            return new MsSqlStreamStoreSettings(connectionString, new ExternalyManagedDatabaseSessionFactory(factory));
+        }
+
         /// <summary>
         ///     Initialized a new instance of <see cref="MsSqlStreamStoreSettings"/>.
         /// </summary>
         /// <param name="connectionString"></param>
-        public MsSqlStreamStoreSettings(string connectionString)
+        /// <param name="sessionFactory"></param>
+        public MsSqlStreamStoreSettings(string connectionString, IDatabaseSessionFactory sessionFactory)
         {
             Ensure.That(connectionString, nameof(connectionString)).IsNotNullOrWhiteSpace();
+            Ensure.That(sessionFactory, nameof(sessionFactory)).IsNotNull();
 
             ConnectionString = connectionString;
-            Factory = new TransactionalDatabaseSessionFactory(connectionString);
+            SessionFactory = sessionFactory;
         }
 
         /// <summary>
@@ -38,7 +53,7 @@ namespace SqlStreamStore
         public CreateStreamStoreNotifier CreateStreamStoreNotifier { get; set; } =
             store => new PollingStreamStoreNotifier(store);
 
-        public IDatabaseSessionFactory Factory { get; set; }
+        public IDatabaseSessionFactory SessionFactory { get; }
 
         /// <summary>
         ///     MsSqlStream store supports stores in a single database through 

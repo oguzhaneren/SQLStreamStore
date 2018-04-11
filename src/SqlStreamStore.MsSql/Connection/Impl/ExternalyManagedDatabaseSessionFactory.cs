@@ -1,10 +1,10 @@
-﻿namespace SqlStreamStore.Connection
+﻿namespace SqlStreamStore.Connection.Impl
 {
     using System;
     using System.Data.SqlClient;
     using System.Threading;
     using System.Threading.Tasks;
-    using SqlStreamStore.Connection.Impl;
+  
 
     public class ExternalyManagedDatabaseSessionFactory
         : IDatabaseSessionFactory
